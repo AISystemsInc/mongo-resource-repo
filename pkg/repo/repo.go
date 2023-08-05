@@ -34,7 +34,7 @@ func NewRepository[T Model](client *mongo.Client) *Repository[T] {
 
 func (r *Repository[T]) FindOne(
 	ctx context.Context,
-	filter interface{},
+	filter any,
 	opts ...*options.FindOneOptions,
 ) (T, error) {
 	result := r.client.Database(r.databaseName).Collection(r.collectionName).FindOne(
@@ -59,7 +59,7 @@ func (r *Repository[T]) FindOne(
 
 func (r *Repository[T]) Find(
 	ctx context.Context,
-	filter interface{},
+	filter any,
 	opts ...*options.FindOptions,
 ) ([]T, error) {
 	cursor, err := r.client.Database(r.databaseName).Collection(r.collectionName).Find(
@@ -110,7 +110,7 @@ func (r *Repository[T]) InsertMany(
 	documents []T,
 	opts ...*options.InsertManyOptions,
 ) error {
-	var interfaceSlice = make([]interface{}, len(documents))
+	var interfaceSlice = make([]any, len(documents))
 	for i, d := range documents {
 		interfaceSlice[i] = d
 	}
@@ -130,7 +130,7 @@ func (r *Repository[T]) InsertMany(
 func (r *Repository[T]) UpdateByID(
 	ctx context.Context,
 	id primitive.ObjectID,
-	update interface{},
+	update any,
 	opts ...*options.UpdateOptions,
 ) error {
 	_, err := r.client.Database(r.databaseName).Collection(r.collectionName).UpdateByID(
@@ -148,8 +148,8 @@ func (r *Repository[T]) UpdateByID(
 
 func (r *Repository[T]) UpdateOne(
 	ctx context.Context,
-	filter interface{},
-	update interface{},
+	filter any,
+	update any,
 	opts ...*options.UpdateOptions,
 ) error {
 	_, err := r.client.Database(r.databaseName).Collection(r.collectionName).UpdateOne(
@@ -168,8 +168,8 @@ func (r *Repository[T]) UpdateOne(
 
 func (r *Repository[T]) UpdateMany(
 	ctx context.Context,
-	filter interface{},
-	update interface{},
+	filter any,
+	update any,
 	opts ...*options.UpdateOptions,
 ) error {
 	_, err := r.client.Database(r.databaseName).Collection(r.collectionName).UpdateMany(
@@ -188,7 +188,7 @@ func (r *Repository[T]) UpdateMany(
 
 func (r *Repository[T]) DeleteOne(
 	ctx context.Context,
-	filter interface{},
+	filter any,
 	opts ...*options.DeleteOptions,
 ) error {
 	_, err := r.client.Database(r.databaseName).Collection(r.collectionName).DeleteOne(
@@ -205,7 +205,7 @@ func (r *Repository[T]) DeleteOne(
 
 func (r *Repository[T]) DeleteMany(
 	ctx context.Context,
-	filter interface{},
+	filter any,
 	opts ...*options.DeleteOptions,
 ) error {
 	_, err := r.client.Database(r.databaseName).Collection(r.collectionName).DeleteMany(
