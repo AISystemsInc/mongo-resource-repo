@@ -2,7 +2,6 @@ package repo
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -10,11 +9,19 @@ import (
 )
 
 var (
-	ErrNotFound = fmt.Errorf("not found")
+	ErrFindOne    = fmt.Errorf("find one error")
+	ErrFind       = fmt.Errorf("find error")
+	ErrInsertOne  = fmt.Errorf("insert one error")
+	ErrInsertMany = fmt.Errorf("insert many error")
+	ErrUpdateOne  = fmt.Errorf("update one error")
+	ErrUpdateByID = fmt.Errorf("update by ID error")
+	ErrUpdateMany = fmt.Errorf("update many error")
+	ErrDeleteOne  = fmt.Errorf("delete one error")
+	ErrDeleteMany = fmt.Errorf("delete many error")
 )
 
 // Repository is a generic repository for a model.
-type Repository[T Model] struct {
+type Repository[M Model, I any] struct {
 	client         *mongo.Client
 	databaseName   string
 	collectionName string
@@ -23,66 +30,66 @@ type Repository[T Model] struct {
 // NewRepository creates a new repository for a model.
 // The model must implement the Model interface.
 // e.g. usersRepo := NewRepository[*User](client)
-func NewRepository[T Model](client *mongo.Client) *Repository[T] {
-	var v T
-	return &Repository[T]{
+func NewRepository[M Model, I any](client *mongo.Client) *Repository[M, I] {
+	var v M
+	return &Repository[M, I]{
 		client:         client,
 		databaseName:   v.GetDatabaseName(),
 		collectionName: v.GetCollectionName(),
 	}
 }
 
-func (r *Repository[T]) FindOne(
+func (r *Repository[M, I]) FindOne(
 	ctx context.Context,
 	filter any,
 	opts ...*options.FindOneOptions,
-) (T, error) {
+) (M, error) {
 	result := r.client.Database(r.databaseName).Collection(r.collectionName).FindOne(
 		ctx,
 		filter,
 		opts...,
 	)
 
-	var value T
+	var value M
 
-	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
-		return value, ErrNotFound
+	if result.Err() != nil {
+		return value, fmt.Errorf("%w: %w", ErrFindOne, result.Err())
 	}
 
 	err := result.Decode(&value)
 	if err != nil {
-		return value, fmt.Errorf("failed to decode result: %w", err)
+		return value, fmt.Errorf("%w: failed to decode result: %w", ErrFindOne, err)
 	}
 
 	return value, nil
 }
 
-func (r *Repository[T]) Find(
+func (r *Repository[M, I]) Find(
 	ctx context.Context,
 	filter any,
 	opts ...*options.FindOptions,
-) ([]T, error) {
+) ([]M, error) {
 	cursor, err := r.client.Database(r.databaseName).Collection(r.collectionName).Find(
 		ctx,
 		filter,
 		opts...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find documents: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrFind, err)
 	}
 
-	var values []T
+	var values []M
 	err = cursor.All(ctx, &values)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode results: %w", err)
+		return nil, fmt.Errorf("%w: failed to decode results: %w", ErrFind, err)
 	}
 
 	return values, nil
 }
 
-func (r *Repository[T]) InsertOne(
+func (r *Repository[M, I]) InsertOne(
 	ctx context.Context,
-	document T,
+	document M,
 	opts ...*options.InsertOneOptions,
 ) (*primitive.ObjectID, error) {
 	result, err := r.client.Database(r.databaseName).Collection(r.collectionName).InsertOne(
@@ -91,7 +98,7 @@ func (r *Repository[T]) InsertOne(
 		opts...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to insert document: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrInsertOne, err)
 	}
 
 	var insertedID primitive.ObjectID
@@ -99,60 +106,82 @@ func (r *Repository[T]) InsertOne(
 	if oid, ok := result.InsertedID.(primitive.ObjectID); ok {
 		insertedID = oid
 	} else {
-		return nil, fmt.Errorf("failed to convert inserted ID to primitive.ObjectID")
+		return nil, fmt.Errorf("%w: failed to convert inserted ID to primitive.ObjectID", ErrInsertOne)
 	}
 
 	return &insertedID, nil
 }
 
-func (r *Repository[T]) InsertMany(
+func (r *Repository[M, I]) InsertMany(
 	ctx context.Context,
-	documents []T,
+	documents []M,
 	opts ...*options.InsertManyOptions,
-) error {
+) ([]I, error) {
 	var interfaceSlice = make([]any, len(documents))
 	for i, d := range documents {
 		interfaceSlice[i] = d
 	}
 
-	_, err := r.client.Database(r.databaseName).Collection(r.collectionName).InsertMany(
+	result, err := r.client.Database(r.databaseName).Collection(r.collectionName).InsertMany(
 		ctx,
 		interfaceSlice,
 		opts...,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to insert documents: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrInsertMany, err)
 	}
 
-	return nil
+	var insertedIDs = make([]I, len(result.InsertedIDs))
+	for i, id := range result.InsertedIDs {
+		if oid, ok := id.(I); ok {
+			insertedIDs[i] = oid
+		} else {
+			var insertID I
+			return nil, fmt.Errorf("%w: failed to convert inserted ID to type %T", ErrInsertMany, insertID)
+		}
+	}
+
+	return insertedIDs, nil
 }
 
-func (r *Repository[T]) UpdateByID(
+func (r *Repository[M, I]) UpdateByID(
 	ctx context.Context,
 	id primitive.ObjectID,
 	update any,
 	opts ...*options.UpdateOptions,
-) error {
-	_, err := r.client.Database(r.databaseName).Collection(r.collectionName).UpdateByID(
+) (*UpdateResult[I], error) {
+	result, err := r.client.Database(r.databaseName).Collection(r.collectionName).UpdateByID(
 		ctx,
 		id,
 		update,
 		opts...,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to update document: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrUpdateByID, err)
 	}
 
-	return nil
+	var updatedID I
+	if oid, ok := result.UpsertedID.(I); ok {
+		updatedID = oid
+	} else {
+		return nil, fmt.Errorf("%w: failed to convert updated ID to type %T", ErrUpdateByID, updatedID)
+	}
+
+	return &UpdateResult[I]{
+		MatchedCount:  result.MatchedCount,
+		ModifiedCount: result.ModifiedCount,
+		UpsertedCount: result.UpsertedCount,
+		UpsertedID:    updatedID,
+	}, nil
 }
 
-func (r *Repository[T]) UpdateOne(
+func (r *Repository[M, I]) UpdateOne(
 	ctx context.Context,
 	filter any,
 	update any,
 	opts ...*options.UpdateOptions,
-) error {
-	_, err := r.client.Database(r.databaseName).Collection(r.collectionName).UpdateOne(
+) (*UpdateResult[I], error) {
+	result, err := r.client.Database(r.databaseName).Collection(r.collectionName).UpdateOne(
 		ctx,
 		filter,
 		update,
@@ -160,19 +189,31 @@ func (r *Repository[T]) UpdateOne(
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to update document: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrUpdateOne, err)
 	}
 
-	return nil
+	var updatedID I
+	if oid, ok := result.UpsertedID.(I); ok {
+		updatedID = oid
+	} else {
+		return nil, fmt.Errorf("%w: failed to convert updated ID to type %T", ErrUpdateOne, updatedID)
+	}
+
+	return &UpdateResult[I]{
+		MatchedCount:  result.MatchedCount,
+		ModifiedCount: result.ModifiedCount,
+		UpsertedCount: result.UpsertedCount,
+		UpsertedID:    updatedID,
+	}, nil
 }
 
-func (r *Repository[T]) UpdateMany(
+func (r *Repository[M, I]) UpdateMany(
 	ctx context.Context,
 	filter any,
 	update any,
 	opts ...*options.UpdateOptions,
-) error {
-	_, err := r.client.Database(r.databaseName).Collection(r.collectionName).UpdateMany(
+) (*UpdateResult[I], error) {
+	result, err := r.client.Database(r.databaseName).Collection(r.collectionName).UpdateMany(
 		ctx,
 		filter,
 		update,
@@ -180,42 +221,62 @@ func (r *Repository[T]) UpdateMany(
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to update documents: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrUpdateMany, err)
 	}
 
-	return nil
+	var updatedID I
+	if oid, ok := result.UpsertedID.(I); ok {
+		updatedID = oid
+	} else {
+		return nil, fmt.Errorf("%w: failed to convert updated ID to type %T", ErrUpdateMany, updatedID)
+	}
+
+	return &UpdateResult[I]{
+		MatchedCount:  result.MatchedCount,
+		ModifiedCount: result.ModifiedCount,
+		UpsertedCount: result.UpsertedCount,
+		UpsertedID:    updatedID,
+	}, nil
 }
 
-func (r *Repository[T]) DeleteOne(
+func (r *Repository[M, I]) DeleteOne(
 	ctx context.Context,
 	filter any,
 	opts ...*options.DeleteOptions,
-) error {
-	_, err := r.client.Database(r.databaseName).Collection(r.collectionName).DeleteOne(
+) (*mongo.DeleteResult, error) {
+	result, err := r.client.Database(r.databaseName).Collection(r.collectionName).DeleteOne(
 		ctx,
 		filter,
 		opts...,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to delete document: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrDeleteOne, err)
 	}
 
-	return nil
+	return result, nil
 }
 
-func (r *Repository[T]) DeleteMany(
+func (r *Repository[M, I]) DeleteMany(
 	ctx context.Context,
 	filter any,
 	opts ...*options.DeleteOptions,
-) error {
-	_, err := r.client.Database(r.databaseName).Collection(r.collectionName).DeleteMany(
+) (*mongo.DeleteResult, error) {
+	result, err := r.client.Database(r.databaseName).Collection(r.collectionName).DeleteMany(
 		ctx,
 		filter,
 		opts...,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to delete documents: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrDeleteMany, err)
 	}
 
-	return nil
+	return result, nil
+}
+
+// UpdateResult is the same as the mongo.UpdateResult type, but with generic support.
+type UpdateResult[I any] struct {
+	MatchedCount  int64 // The number of documents matched by the filter.
+	ModifiedCount int64 // The number of documents modified by the operation.
+	UpsertedCount int64 // The number of documents upserted by the operation.
+	UpsertedID    I     // The _id field of the upserted document, or nil if no upsert was done.
 }

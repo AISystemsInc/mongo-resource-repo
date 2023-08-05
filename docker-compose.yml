@@ -3,7 +3,6 @@ name: mongo-resource-repo-test
 services:
   mongodb:
     image: mongo:latest
-    container_name: mongodb
     ports:
       - "57018:27017"
     restart: always
