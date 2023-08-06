@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -52,7 +53,7 @@ func TestRepository_FindOne(t *testing.T) {
 		bootstrap func() error
 		tearDown  func() error
 		want      T
-		wantErr   bool
+		wantErr   error
 	}
 	tests := []testCase[*FindOneModel]{
 		{
@@ -77,7 +78,7 @@ func TestRepository_FindOne(t *testing.T) {
 			want: &FindOneModel{
 				ID: findOneID,
 			},
-			wantErr: false,
+			wantErr: nil,
 		},
 		{
 			name: "should return an error if the model is not found",
@@ -96,7 +97,7 @@ func TestRepository_FindOne(t *testing.T) {
 				return err
 			},
 			want:    nil,
-			wantErr: true,
+			wantErr: ErrFindOne,
 		},
 		{
 			name: "should return an error if there was a decode error",
@@ -117,7 +118,7 @@ func TestRepository_FindOne(t *testing.T) {
 				return err
 			},
 			want:    empty,
-			wantErr: true,
+			wantErr: ErrFindOne,
 		},
 	}
 	for _, tt := range tests {
@@ -136,8 +137,12 @@ func TestRepository_FindOne(t *testing.T) {
 			}()
 
 			got, err := tt.r.FindOne(tt.args.ctx, tt.args.filter, tt.args.opts...)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("FindOne() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr != nil && (err == nil || !errors.Is(err, tt.wantErr)) {
+				t.Errorf("Find() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr == nil && err != nil {
+				t.Errorf("Find() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
@@ -174,6 +179,8 @@ func TestRepository_Find(t *testing.T) {
 		}
 	}()
 
+	var empty []*FindModel
+
 	var firstID = primitive.NewObjectID()
 	var secondID = primitive.NewObjectID()
 
@@ -189,7 +196,7 @@ func TestRepository_Find(t *testing.T) {
 		bootstrap func() error
 		tearDown  func() error
 		want      []M
-		wantErr   bool
+		wantErr   error
 	}
 	tests := []testCase[*FindModel, primitive.ObjectID]{
 		{
@@ -226,7 +233,52 @@ func TestRepository_Find(t *testing.T) {
 					Name: "model 2",
 				},
 			},
-			wantErr: false,
+			wantErr: nil,
+		},
+		{
+			name: "should return an empty slice if no models were found",
+			r:    NewRepository[*FindModel, primitive.ObjectID](mongoClient),
+			args: args{
+				ctx:    context.TODO(),
+				filter: bson.M{},
+			},
+			bootstrap: func() error {
+				return nil
+			},
+			tearDown: func() error {
+				err := mongoClient.Database("find_model_db").Collection("find_model_col").Drop(context.Background())
+				return err
+			},
+			want:    empty,
+			wantErr: nil,
+		},
+		{
+			name: "should return an error if an object failed to decode",
+			r:    NewRepository[*FindModel, primitive.ObjectID](mongoClient),
+			args: args{
+				ctx:    context.TODO(),
+				filter: bson.M{},
+			},
+			bootstrap: func() error {
+				var items []interface{}
+				items = append(items, bson.M{
+					"_id":  firstID,
+					"name": "model 1",
+				})
+				items = append(items, bson.M{
+					"_id":  secondID,
+					"name": true,
+				})
+
+				_, err := mongoClient.Database("find_model_db").Collection("find_model_col").InsertMany(context.TODO(), items)
+				return err
+			},
+			tearDown: func() error {
+				err := mongoClient.Database("find_model_db").Collection("find_model_col").Drop(context.Background())
+				return err
+			},
+			want:    empty,
+			wantErr: ErrFind,
 		},
 	}
 	for _, tt := range tests {
@@ -245,7 +297,11 @@ func TestRepository_Find(t *testing.T) {
 			}()
 
 			got, err := tt.r.Find(tt.args.ctx, tt.args.filter, tt.args.opts...)
-			if (err != nil) != tt.wantErr {
+			if tt.wantErr != nil && (err == nil || !errors.Is(err, tt.wantErr)) {
+				t.Errorf("Find() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr == nil && err != nil {
 				t.Errorf("Find() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
