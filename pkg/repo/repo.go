@@ -3,7 +3,6 @@ package repo
 import (
 	"context"
 	"fmt"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -147,25 +146,25 @@ func (r *Repository[M, I]) InsertOne(
 	ctx context.Context,
 	document M,
 	opts ...*options.InsertOneOptions,
-) (*primitive.ObjectID, error) {
+) (I, error) {
+	var insertedID I
+
 	result, err := r.client.Database(r.databaseName).Collection(r.collectionName).InsertOne(
 		ctx,
 		document,
 		opts...,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInsertOne, err)
+		return insertedID, fmt.Errorf("%w: %w", ErrInsertOne, err)
 	}
 
-	var insertedID primitive.ObjectID
-
-	if oid, ok := result.InsertedID.(primitive.ObjectID); ok {
+	if oid, ok := result.InsertedID.(I); ok {
 		insertedID = oid
 	} else {
-		return nil, fmt.Errorf("%w: failed to convert inserted ID to primitive.ObjectID", ErrInsertOne)
+		return insertedID, fmt.Errorf("%w: failed to convert inserted ID to %T", ErrInsertOne, insertedID)
 	}
 
-	return &insertedID, nil
+	return insertedID, nil
 }
 
 func (r *Repository[M, I]) InsertMany(
@@ -202,7 +201,7 @@ func (r *Repository[M, I]) InsertMany(
 
 func (r *Repository[M, I]) UpdateByID(
 	ctx context.Context,
-	id primitive.ObjectID,
+	id I,
 	update any,
 	opts ...*options.UpdateOptions,
 ) (*UpdateResult[I], error) {
