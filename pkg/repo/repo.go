@@ -216,17 +216,20 @@ func (r *Repository[M, I]) UpdateByID(
 	}
 
 	var updatedID I
-	if oid, ok := result.UpsertedID.(I); ok {
-		updatedID = oid
-	} else {
-		return nil, fmt.Errorf("%w: failed to convert updated ID to type %T", ErrUpdateByID, updatedID)
+
+	if result.UpsertedID != nil {
+		if oid, ok := result.UpsertedID.(I); ok {
+			updatedID = oid
+		} else {
+			return nil, fmt.Errorf("%w: failed to convert updated ID (type %T) to type %T", ErrUpdateByID, result.UpsertedID, updatedID)
+		}
 	}
 
 	return &UpdateResult[I]{
 		MatchedCount:  result.MatchedCount,
 		ModifiedCount: result.ModifiedCount,
 		UpsertedCount: result.UpsertedCount,
-		UpsertedID:    updatedID,
+		UpsertedID:    &updatedID,
 	}, nil
 }
 
@@ -248,17 +251,20 @@ func (r *Repository[M, I]) UpdateOne(
 	}
 
 	var updatedID I
-	if oid, ok := result.UpsertedID.(I); ok {
-		updatedID = oid
-	} else {
-		return nil, fmt.Errorf("%w: failed to convert updated ID to type %T", ErrUpdateOne, updatedID)
+
+	if result.UpsertedID != nil {
+		if oid, ok := result.UpsertedID.(I); ok {
+			updatedID = oid
+		} else {
+			return nil, fmt.Errorf("%w: failed to convert updated ID (type %T) to type %T", ErrUpdateOne, result.UpsertedID, updatedID)
+		}
 	}
 
 	return &UpdateResult[I]{
 		MatchedCount:  result.MatchedCount,
 		ModifiedCount: result.ModifiedCount,
 		UpsertedCount: result.UpsertedCount,
-		UpsertedID:    updatedID,
+		UpsertedID:    &updatedID,
 	}, nil
 }
 
@@ -280,17 +286,20 @@ func (r *Repository[M, I]) UpdateMany(
 	}
 
 	var updatedID I
-	if oid, ok := result.UpsertedID.(I); ok {
-		updatedID = oid
-	} else {
-		return nil, fmt.Errorf("%w: failed to convert updated ID to type %T", ErrUpdateMany, updatedID)
+
+	if result.UpsertedID != nil {
+		if oid, ok := result.UpsertedID.(I); ok {
+			updatedID = oid
+		} else {
+			return nil, fmt.Errorf("%w: failed to convert updated ID (type %T) to type %T", ErrUpdateMany, result.UpsertedID, updatedID)
+		}
 	}
 
 	return &UpdateResult[I]{
 		MatchedCount:  result.MatchedCount,
 		ModifiedCount: result.ModifiedCount,
 		UpsertedCount: result.UpsertedCount,
-		UpsertedID:    updatedID,
+		UpsertedID:    &updatedID,
 	}, nil
 }
 
@@ -333,5 +342,5 @@ type UpdateResult[I any] struct {
 	MatchedCount  int64 // The number of documents matched by the filter.
 	ModifiedCount int64 // The number of documents modified by the operation.
 	UpsertedCount int64 // The number of documents upserted by the operation.
-	UpsertedID    I     // The _id field of the upserted document, or nil if no upsert was done.
+	UpsertedID    *I    // The _id field of the upserted document, or nil if no upsert was done.
 }
