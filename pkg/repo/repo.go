@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"fmt"
+
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -39,6 +40,7 @@ func NewRepository[M Model, I any](client *mongo.Client) *Repository[M, I] {
 	}
 }
 
+// FindOne returns the first document that matches the filter.
 func (r *Repository[M, I]) FindOne(
 	ctx context.Context,
 	filter any,
@@ -64,6 +66,7 @@ func (r *Repository[M, I]) FindOne(
 	return value, nil
 }
 
+// Find returns all documents that match the filter.
 func (r *Repository[M, I]) Find(
 	ctx context.Context,
 	filter any,
@@ -142,6 +145,7 @@ func (r *Repository[M, I]) FindStream(
 	return values, errors, cancel, nil
 }
 
+// InsertOne inserts a single document into the collection.
 func (r *Repository[M, I]) InsertOne(
 	ctx context.Context,
 	document M,
@@ -167,6 +171,7 @@ func (r *Repository[M, I]) InsertOne(
 	return insertedID, nil
 }
 
+// InsertMany inserts multiple documents into the collection.
 func (r *Repository[M, I]) InsertMany(
 	ctx context.Context,
 	documents []M,
@@ -199,6 +204,7 @@ func (r *Repository[M, I]) InsertMany(
 	return insertedIDs, nil
 }
 
+// UpdateByID updates a single document by its ID.
 func (r *Repository[M, I]) UpdateByID(
 	ctx context.Context,
 	id I,
@@ -233,6 +239,7 @@ func (r *Repository[M, I]) UpdateByID(
 	}, nil
 }
 
+// UpdateOne updates a single document by its filter.
 func (r *Repository[M, I]) UpdateOne(
 	ctx context.Context,
 	filter any,
@@ -268,6 +275,7 @@ func (r *Repository[M, I]) UpdateOne(
 	}, nil
 }
 
+// UpdateMany updates multiple documents by their filter.
 func (r *Repository[M, I]) UpdateMany(
 	ctx context.Context,
 	filter any,
@@ -303,6 +311,7 @@ func (r *Repository[M, I]) UpdateMany(
 	}, nil
 }
 
+// DeleteOne deletes a single document by its filter.
 func (r *Repository[M, I]) DeleteOne(
 	ctx context.Context,
 	filter any,
@@ -320,6 +329,7 @@ func (r *Repository[M, I]) DeleteOne(
 	return result, nil
 }
 
+// DeleteMany deletes multiple documents by their filter.
 func (r *Repository[M, I]) DeleteMany(
 	ctx context.Context,
 	filter any,
