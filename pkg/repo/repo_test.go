@@ -3,13 +3,14 @@ package repo
 import (
 	"context"
 	"errors"
+	"reflect"
+	"testing"
+	"time"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"reflect"
-	"testing"
-	"time"
 )
 
 type FindOneModel struct {
@@ -415,4 +416,121 @@ func TestRepository_FindStream(t *testing.T) {
 			}
 		}
 	})
+}
+
+type CountModel struct {
+	ID   primitive.ObjectID `bson:"_id"`
+	Name string             `bson:"name"`
+}
+
+func (c *CountModel) GetDatabaseName() string {
+	return "count_model_db"
+}
+
+func (c *CountModel) GetCollectionName() string {
+	return "count_model_col"
+}
+
+func TestRepository_Count(t *testing.T) {
+	mongoClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://localhost:57018"))
+	if err != nil {
+		t.Errorf("error connecting to mongo: %v", err)
+		return
+	}
+
+	defer func() {
+		err := mongoClient.Disconnect(context.Background())
+		if err != nil {
+			t.Errorf("error disconnecting from mongo: %v", err)
+		}
+	}()
+
+	var repository = NewRepository[*CountModel, primitive.ObjectID](mongoClient)
+
+	var ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	inserted := []*CountModel{
+		{ID: primitive.NewObjectID(), Name: "Test1"},
+		{ID: primitive.NewObjectID(), Name: "Test2"},
+		{ID: primitive.NewObjectID(), Name: "Test3"},
+	}
+
+	defer func() {
+		err := mongoClient.Database("count_model_db").Collection("count_model_col").Drop(context.Background())
+		if err != nil {
+			t.Errorf("error dropping collection: %v", err)
+		}
+	}()
+
+	for _, model := range inserted {
+		_, err := repository.InsertOne(ctx, model)
+		if err != nil {
+			t.Errorf("error inserting model: %v", err)
+			return
+		}
+	}
+
+	count, err := repository.Count(ctx, bson.M{})
+	if err != nil {
+		t.Errorf("error counting documents: %v", err)
+		return
+	}
+
+	if count != int64(len(inserted)) {
+		t.Errorf("expected %d documents but got %d", len(inserted), count)
+		return
+	}
+}
+
+func TestRepository_CountEstimate(t *testing.T) {
+	mongoClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://localhost:57018"))
+	if err != nil {
+		t.Errorf("error connecting to mongo: %v", err)
+		return
+	}
+
+	defer func() {
+		err := mongoClient.Disconnect(context.Background())
+		if err != nil {
+			t.Errorf("error disconnecting from mongo: %v", err)
+		}
+	}()
+
+	var repository = NewRepository[*CountModel, primitive.ObjectID](mongoClient)
+
+	var ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	inserted := []*CountModel{
+		{ID: primitive.NewObjectID(), Name: "Test1"},
+		{ID: primitive.NewObjectID(), Name: "Test2"},
+		{ID: primitive.NewObjectID(), Name: "Test3"},
+	}
+
+	defer func() {
+		err := mongoClient.Database("count_model_db").Collection("count_model_col").Drop(context.Background())
+		if err != nil {
+			t.Errorf("error dropping collection: %v", err)
+		}
+	}()
+
+	for _, model := range inserted {
+		_, err := repository.InsertOne(ctx, model)
+		if err != nil {
+			t.Errorf("error inserting model: %v", err)
+			return
+		}
+	}
+
+	count, err := repository.CountEstimate(ctx)
+	if err != nil {
+		t.Errorf("error estimating document count: %v", err)
+		return
+	}
+
+	if count != int64(len(inserted)) {
+		t.Errorf("expected %d documents but got %d", len(inserted), count)
+		return
+	}
 }

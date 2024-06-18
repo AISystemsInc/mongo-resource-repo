@@ -19,6 +19,7 @@ var (
 	ErrUpdateMany = fmt.Errorf("update many error")
 	ErrDeleteOne  = fmt.Errorf("delete one error")
 	ErrDeleteMany = fmt.Errorf("delete many error")
+	ErrCount      = fmt.Errorf("count error")
 )
 
 // Repository is a generic repository for a model.
@@ -353,4 +354,22 @@ type UpdateResult[I any] struct {
 	ModifiedCount int64 // The number of documents modified by the operation.
 	UpsertedCount int64 // The number of documents upserted by the operation.
 	UpsertedID    *I    // The _id field of the upserted document, or nil if no upsert was done.
+}
+
+// Count returns the number of documents that match the filter.
+func (r *Repository[M, I]) Count(ctx context.Context, filter any, opts ...*options.CountOptions) (int64, error) {
+	count, err := r.client.Database(r.databaseName).Collection(r.collectionName).CountDocuments(ctx, filter, opts...)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %w", ErrCount, err)
+	}
+	return count, nil
+}
+
+// CountEstimate returns the estimated number of documents that match the filter.
+func (r *Repository[M, I]) CountEstimate(ctx context.Context, opts ...*options.EstimatedDocumentCountOptions) (int64, error) {
+	count, err := r.client.Database(r.databaseName).Collection(r.collectionName).EstimatedDocumentCount(ctx, opts...)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %w", ErrCount, err)
+	}
+	return count, nil
 }
